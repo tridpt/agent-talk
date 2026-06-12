@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Talk — Hai agent trò chuyện</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>🤖 Agent Talk</h1>
+    <p class="sub">Hai agent AI tự trò chuyện với nhau — bạn ngồi xem chúng nói gì.</p>
+  </header>
+
+  <main>
+    <section class="setup" id="setup">
+      <div class="agents">
+        <div class="agent-card a">
+          <label>Tên Agent A</label>
+          <input id="nameA" value="Lan" />
+          <label>Bộ não (LLM)</label>
+          <select id="providerA" class="provider"></select>
+          <label>Tính cách mẫu</label>
+          <select id="tplA" class="tpl" data-target="personaA"></select>
+          <label>Tính cách Agent A</label>
+          <textarea id="personaA" rows="4">Bạn là một người lạc quan, tò mò, thích đặt câu hỏi và luôn nhìn mọi việc theo hướng tích cực.</textarea>
+        </div>
+        <div class="agent-card b">
+          <label>Tên Agent B</label>
+          <input id="nameB" value="Minh" />
+          <label>Bộ não (LLM)</label>
+          <select id="providerB" class="provider"></select>
+          <label>Tính cách mẫu</label>
+          <select id="tplB" class="tpl" data-target="personaB"></select>
+          <label>Tính cách Agent B</label>
+          <textarea id="personaB" rows="4">Bạn là một người hoài nghi, thực tế, thích phản biện và hay chỉ ra mặt trái của vấn đề.</textarea>
+        </div>
+      </div>
+
+      <label>Chủ đề (để trống để chúng tự chọn)</label>
+      <input id="topic" value="Liệu AI có thể có cảm xúc thật sự không?" />
+
+      <div class="controls">
+        <label>Số lượt mỗi lần
+          <input id="maxTurns" type="number" value="12" min="2" max="100" />
+        </label>
+        <label>Tốc độ (giây/lượt)
+          <input id="delay" type="number" value="1" min="0" max="10" step="0.5" />
+        </label>
+        <label>Sáng tạo (temperature)
+          <input id="temp" type="number" value="0.9" min="0" max="2" step="0.1" />
+        </label>
+      </div>
+
+      <div class="buttons">
+        <button id="startBtn">▶ Bắt đầu</button>
+        <button id="continueBtn" disabled>⏩ Tiếp tục</button>
+        <button id="stopBtn" disabled>⏹ Dừng</button>
+        <button id="clearBtn">🗑 Xóa</button>
+      </div>
+
+      <div class="save-row">
+        <span>Lưu hội thoại:</span>
+        <button class="save" data-fmt="txt" disabled>.txt</button>
+        <button class="save" data-fmt="md" disabled>.md</button>
+        <button class="save" data-fmt="json" disabled>.json</button>
+      </div>
+    </section>
+
+    <section class="chat" id="chat"></section>
+  </main>
+
+  <script src="/personas.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
