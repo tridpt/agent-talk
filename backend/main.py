@@ -8,8 +8,6 @@ from . import config, llm
 
 app = FastAPI(title="Agent Talk")
 
-DIRECTOR_NAME = "Đạo diễn"
-
 
 class Agent(BaseModel):
     name: str

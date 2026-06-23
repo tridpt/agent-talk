@@ -1,64 +1,80 @@
 # Agent Talk 🤖💬
 
-Cho hai agent AI co tinh cach rieng **tu tro chuyen voi nhau**, ban ngoi xem chung noi gi.
+Cho nhiều agent AI có tính cách riêng **tự trò chuyện với nhau**, bạn ngồi xem (và xen vào) chúng nói gì.
 
-Khong can GPU. Dung API LLM free (Groq / Gemini / OpenRouter).
+Không cần GPU. Dùng API LLM free (Groq / Gemini / OpenRouter).
 
-## Cau truc
+## Tính năng
+
+- **Nhiều agent** (2 trở lên) cùng tham gia một cuộc hội thoại nhóm.
+- **Streaming**: xem từng chữ agent "gõ" ra theo thời gian thực.
+- **Thứ tự nói**: luân phiên, hoặc để AI tự quyết ai nói tiếp ("Tự chọn").
+- **Tính cách mẫu** chọn nhanh + ô tính cách tự do cho mỗi agent.
+- **Mục tiêu ngầm**: cho mỗi agent một ý đồ riêng để khéo léo dẫn dắt câu chuyện.
+- **Đạo diễn**: xen vào giữa chừng để gợi ý, đặt câu hỏi, đổi hướng.
+- **Tự tóm tắt** khi hội thoại dài để không vỡ ngữ cảnh.
+- **Lưu phiên** tự động (localStorage) và **xuất file** `.txt` / `.md` / `.json`.
+- **Nhiều "bộ não"**: cấu hình 2 provider để mỗi agent dùng một LLM khác nhau.
+
+## Cấu trúc
 
 ```
 agent-talk/
 ├── backend/
-│   ├── main.py      # FastAPI: dieu phoi luot noi
-│   ├── llm.py       # Goi LLM (chuan OpenAI-compatible)
-│   └── config.py    # Doc cau hinh tu .env
+│   ├── main.py      # FastAPI: điều phối lượt nói, tóm tắt, chọn người nói
+│   ├── llm.py       # Gọi LLM (chuẩn OpenAI-compatible, có streaming)
+│   └── config.py    # Đọc cấu hình provider từ .env
 ├── frontend/
-│   ├── index.html   # Giao dien cau hinh + khung chat
-│   ├── app.js       # Vong lap A <-> B
+│   ├── index.html   # Giao diện cấu hình + khung chat
+│   ├── app.js       # Vòng lặp hội thoại, lưu phiên, xuất file
+│   ├── personas.js  # Thư viện tính cách mẫu
 │   └── style.css
 ├── .env.example
 └── requirements.txt
 ```
 
-## Cai dat
+## Cài đặt
 
 ```bash
-# 1. Tao moi truong ao (khuyen dung)
+# 1. Tạo môi trường ảo (khuyên dùng)
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # macOS/Linux
 
-# 2. Cai thu vien
+# 2. Cài thư viện
 pip install -r requirements.txt
 
-# 3. Tao file .env tu mau roi dan API key
+# 3. Tạo file .env từ mẫu rồi dán API key
 copy .env.example .env        # Windows
 # cp .env.example .env        # macOS/Linux
 ```
 
-### Lay API key free
+### Lấy API key free
 
-- **Groq** (mac dinh, nhanh): https://console.groq.com → tao key → dan vao `LLM_API_KEY`.
-- **Gemini**: https://aistudio.google.com/app/apikey — xem vi du trong `.env.example`.
+- **Groq** (mặc định, nhanh): https://console.groq.com → tạo key → dán vào `LLM_API_KEY`.
+- **Gemini**: https://aistudio.google.com/app/apikey — xem ví dụ trong `.env.example` (điền vào nhóm `LLM2_*` để làm provider phụ).
 
-## Chay
+> ⚠️ File `.env` chứa API key thật — đã được `.gitignore`, đừng chia sẻ hay đăng nó lên đâu.
+
+## Chạy
 
 ```bash
 uvicorn backend.main:app --reload
 ```
 
-Mo trinh duyet: http://127.0.0.1:8000
+Mở trình duyệt: http://127.0.0.1:8000
 
-## Cach dung
+## Cách dùng
 
-1. Dat ten + tinh cach cho Agent A va Agent B.
-2. (Tuy chon) nhap chu de.
-3. Chinh so luot, toc do, do sang tao.
-4. Bam **Bat dau** va xem hai agent tro chuyen.
+1. Thêm/đặt tên và tính cách cho các agent (ít nhất 2). Có thể chọn tính cách mẫu để điền nhanh.
+2. (Tùy chọn) nhập chủ đề và mục tiêu ngầm cho từng agent.
+3. Chọn thứ tự nói, số lượt, tốc độ, độ sáng tạo.
+4. Bấm **Bắt đầu** và xem chúng trò chuyện. Dùng ô **Đạo diễn** để xen vào bất cứ lúc nào.
+5. Bấm **Tiếp tục** để chạy thêm lượt, hoặc lưu lại hội thoại ra file.
 
-## Y tuong mo rong
+## Ý tưởng mở rộng
 
-- Them agent thu 3, 4 (hoi thoai nhom).
-- Luu lai cac cuoc tro chuyen ra file.
-- Cho moi agent mot "muc tieu" ngam de xem chung thuyet phuc nhau.
-- Doi LLM khac nhau cho moi agent.
+- Cho agent "ghi nhớ" giữa nhiều phiên (bộ nhớ dài hạn).
+- Bình chọn/chấm điểm xem agent nào thuyết phục hơn.
+- Thêm giọng nói (text-to-speech) cho mỗi agent.
+- Chia sẻ phiên hội thoại qua link.
