@@ -71,6 +71,22 @@ uvicorn backend.main:app --reload
 
 Mở trình duyệt: http://127.0.0.1:8000
 
+## Chạy test
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Test mock phần gọi LLM nên **không tốn API key** và chạy được offline.
+
+## Chạy bằng Docker
+
+```bash
+docker build -t agent-talk .
+docker run -p 8000:8000 -e LLM_API_KEY=dan_key_cua_ban agent-talk
+```
+
 ## Cách dùng
 
 1. Thêm/đặt tên và tính cách cho các agent (ít nhất 2). Có thể chọn tính cách mẫu để điền nhanh.

@@ -1,0 +1,3 @@
+# Phu thuoc danh cho phat trien / chay test
+-r requirements.txt
+pytest==9.1.0
