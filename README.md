@@ -8,7 +8,7 @@ Không cần GPU. Dùng API LLM free (Groq / Gemini / OpenRouter).
 
 - **Nhiều agent** (2 trở lên) cùng tham gia một cuộc hội thoại nhóm.
 - **Streaming**: xem từng chữ agent "gõ" ra theo thời gian thực.
-- **Thứ tự nói**: luân phiên, hoặc để AI tự quyết ai nói tiếp ("Tự chọn").
+- **Thứ tự nói**: luân phiên, để AI tự quyết ai nói tiếp ("Tự chọn"), hoặc **chế độ tranh biện** (mở màn → phản biện → kết luận, tự chấm điểm cuối trận).
 - **Tính cách mẫu** chọn nhanh + ô tính cách tự do cho mỗi agent.
 - **Mục tiêu ngầm**: cho mỗi agent một ý đồ riêng để khéo léo dẫn dắt câu chuyện.
 - **Đạo diễn**: xen vào giữa chừng để gợi ý, đặt câu hỏi, đổi hướng.
@@ -17,6 +17,7 @@ Không cần GPU. Dùng API LLM free (Groq / Gemini / OpenRouter).
 - **Bộ nhớ dài hạn**: agent tự ghi nhớ điều đã học sau mỗi phiên và dùng lại ở phiên sau.
 - **Chấm điểm đa tiêu chí**: trọng tài AI chấm từng agent theo logic, bằng chứng, sáng tạo, thái độ và chọn người thắng.
 - **Bảng xếp hạng tích lũy**: cộng dồn số lần thắng và điểm trung bình của mỗi agent qua nhiều phiên.
+- **Tra cứu web**: bật để agent tìm dẫn chứng thật trước khi nói (DuckDuckGo miễn phí, hoặc Tavily nếu có key).
 - **Sao chép & chia sẻ**: chép nhanh hội thoại, hoặc tạo link chia sẻ cả phiên.
 - **Lưu phiên** tự động (localStorage) và **xuất file** `.txt` / `.md` / `.json`.
 - **Nhiều "bộ não"**: cấu hình 2 provider để mỗi agent dùng một LLM khác nhau.
@@ -26,8 +27,9 @@ Không cần GPU. Dùng API LLM free (Groq / Gemini / OpenRouter).
 ```
 agent-talk/
 ├── backend/
-│   ├── main.py      # FastAPI: điều phối lượt nói, tóm tắt, chọn người nói
+│   ├── main.py      # FastAPI: điều phối lượt nói, tóm tắt, chọn người nói, chấm điểm
 │   ├── llm.py       # Gọi LLM (chuẩn OpenAI-compatible, có streaming)
+│   ├── search.py    # Tra cứu web (Tavily nếu có key, không thì DuckDuckGo)
 │   └── config.py    # Đọc cấu hình provider từ .env
 ├── frontend/
 │   ├── index.html   # Giao diện cấu hình + khung chat
@@ -79,7 +81,7 @@ Mở trình duyệt: http://127.0.0.1:8000
 
 ## Ý tưởng mở rộng
 
-- Cho agent chủ động tra cứu thông tin ngoài (web/tools) khi tranh luận.
-- Chế độ tranh biện có thể lệ (mở màn / phản biện / kết luận).
 - Lưu phiên ở server và chia sẻ bằng mã ngắn thay vì nhét cả phiên vào URL.
 - Đồng bộ phiên/bộ nhớ/bảng xếp hạng giữa nhiều thiết bị.
+- Hiển thị rõ nguồn tra cứu (footnote) dưới mỗi câu có dẫn chứng.
+- Cho người xem bình chọn song song với trọng tài AI.

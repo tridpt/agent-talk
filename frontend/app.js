@@ -208,7 +208,7 @@ async function maybeSummarize() {
 }
 
 // ---------- Gọi 1 lượt (streaming) ----------
-async function streamTurn(speaker, target) {
+async function streamTurn(speaker, target, phase = "") {
   const sendHistory = history.slice(summarizedCount).map((h) => ({ name: h.name, text: h.text }));
   const resp = await fetch("/api/turn_stream", {
     method: "POST",
@@ -220,6 +220,8 @@ async function streamTurn(speaker, target) {
       history: sendHistory,
       summary,
       temperature: parseFloat($("temp").value) || 0.9,
+      allow_search: $("searchOn").checked,
+      phase,
     }),
   });
   if (!resp.ok) {
@@ -302,8 +304,59 @@ function start() {
   summarizedCount = 0;
   lastSpeaker = "";
   $("chat").innerHTML = "";
+  if ($("orderMode").value === "debate") return debateLoop();
   const agents = getAgents();
   loop(agents[0].name);
+}
+
+// ---------- Chế độ tranh biện ----------
+const DEBATE_PHASES = [
+  { key: "mo_man", label: "Mở màn" },
+  { key: "phan_bien", label: "Phản biện" },
+  { key: "ket_luan", label: "Kết luận" },
+];
+
+function addPhaseBanner(label) {
+  const div = document.createElement("div");
+  div.className = "bubble phase";
+  div.textContent = `— ${label} —`;
+  $("chat").appendChild(div);
+  scrollChat();
+}
+
+async function debateLoop() {
+  running = true;
+  refreshUi();
+  const delayMs = (parseFloat($("delay").value) || 0) * 1000;
+  const agents = getAgents();
+  try {
+    for (const phase of DEBATE_PHASES) {
+      if (!running) break;
+      addPhaseBanner(phase.label);
+      for (const a of agents) {
+        if (!running) break;
+        await maybeSummarize();
+        const target = newBubble(a.name);
+        const bubbleEl = target.closest(".bubble");
+        bubbleEl.classList.add("speaking");
+        const text = await streamTurn(a.name, target, phase.key);
+        bubbleEl.classList.remove("speaking");
+        if (!running) { if (!text) bubbleEl.remove(); break; }
+        if (!text) { bubbleEl.remove(); continue; }
+        history.push({ name: a.name, text, kind: "agent" });
+        lastSpeaker = a.name;
+        saveSession();
+        tts.speak(a.name, text);
+        if (delayMs && running) await sleep(delayMs);
+      }
+    }
+  } catch (e) {
+    addError(e.message);
+  }
+  await updateMemories();
+  stop();
+  // Tranh bien xong thi tu dong cham diem
+  if (history.length) await scoreConversation();
 }
 
 async function cont() {
@@ -364,6 +417,7 @@ function sessionData() {
     temp: $("temp").value,
     ttsOn: $("ttsOn").checked,
     memOn: $("memOn").checked,
+    searchOn: $("searchOn").checked,
     history, summary, summarizedCount, lastSpeaker,
     savedAt: new Date().toISOString(),
   };
@@ -390,6 +444,7 @@ function restoreSession() {
   if (d.temp !== undefined) $("temp").value = d.temp;
   if (d.ttsOn !== undefined) $("ttsOn").checked = d.ttsOn;
   if (d.memOn !== undefined) $("memOn").checked = d.memOn;
+  if (d.searchOn !== undefined) $("searchOn").checked = d.searchOn;
   history = d.history || [];
   summary = d.summary || "";
   summarizedCount = d.summarizedCount || 0;
@@ -685,6 +740,7 @@ function bindEvents() {
   $("scoreBtn").addEventListener("click", scoreConversation);
   $("ttsOn").addEventListener("change", () => { if (!$("ttsOn").checked) tts.stop(); saveSession(); });
   $("memOn").addEventListener("change", saveSession);
+  $("searchOn").addEventListener("change", saveSession);
   ["topic", "orderMode", "maxTurns", "delay", "temp"].forEach((id) =>
     $(id).addEventListener("input", saveSession)
   );

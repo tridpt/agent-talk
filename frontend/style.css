@@ -171,3 +171,10 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   .crit-grid { grid-template-columns: 1fr; }
   .crit-label { flex-basis: 90px; }
 }
+
+/* ----- Banner giai đoạn tranh biện ----- */
+.bubble.phase {
+  align-self: center; background: transparent; color: var(--muted);
+  font-size: .8rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  padding: 4px 0; max-width: 100%;
+}

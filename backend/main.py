@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, llm
+from . import config, llm, search
 
 app = FastAPI(title="Agent Talk")
 
@@ -27,6 +27,8 @@ class TurnRequest(BaseModel):
     history: list[dict] = []     # [{"name": "...", "text": "..."}]
     summary: str = ""            # tom tat doan cu (neu co)
     temperature: float = 0.9
+    allow_search: bool = False   # cho phep tra cuu web truoc khi noi
+    phase: str = ""              # giai doan tranh bien (mo man / phan bien / ket luan)
 
 
 class NextRequest(BaseModel):
@@ -89,9 +91,27 @@ def build_messages(req: TurnRequest):
             f"khi phù hợp): {me.memory.strip()}"
         )
 
+    phase_line = ""
+    phase = (req.phase or "").strip().lower()
+    if phase == "mo_man":
+        phase_line = (
+            "\n[TRANH BIỆN — MỞ MÀN] Hãy trình bày rõ lập trường của bạn về chủ đề "
+            "và đưa ra 1-2 luận điểm chính. Chưa cần phản bác ai."
+        )
+    elif phase == "phan_bien":
+        phase_line = (
+            "\n[TRANH BIỆN — PHẢN BIỆN] Hãy phản bác trực tiếp luận điểm của đối phương "
+            "và củng cố quan điểm của bạn bằng lý lẽ/bằng chứng."
+        )
+    elif phase == "ket_luan":
+        phase_line = (
+            "\n[TRANH BIỆN — KẾT LUẬN] Hãy tóm lại lập trường và đưa ra lời chốt "
+            "thuyết phục cuối cùng, không nêu thêm luận điểm mới."
+        )
+
     system = (
         f"Bạn là {me.name}. {me.persona}\n"
-        f"{who}{topic_line}{goal_line}{memory_line}\n"
+        f"{who}{topic_line}{goal_line}{memory_line}{phase_line}\n"
         "Hãy trả lời tự nhiên, ngắn gọn (2-4 câu), bằng tiếng Việt CÓ DẤU đầy đủ, "
         "đúng tính cách của bạn. Chỉ nói lời thoại của bạn, không mô tả hành động, "
         "không viết tên mình ở đầu câu, không đóng vai người khác. "
@@ -124,6 +144,43 @@ def build_messages(req: TurnRequest):
     return me, messages
 
 
+async def maybe_search_context(req: TurnRequest, me: Agent):
+    """Neu allow_search: nho LLM nghi 1 truy van, tra cuu web, tra ve system message.
+    Khong bao gio raise — loi gi cung tra ve None de luot noi van chay binh thuong."""
+    if not req.allow_search:
+        return None
+    recent = req.history[-6:]
+    convo = "\n".join(f'{t.get("name","")}: {t.get("text","")}' for t in recent)
+    q_prompt = (
+        f"Chủ đề: {req.topic or '(chưa rõ)'}.\n"
+        f"Diễn biến gần đây:\n{convo or '(chưa có)'}\n\n"
+        f"Sắp tới lượt {me.name} nói. Nếu cần một dữ kiện THỰC TẾ để lập luận có sức nặng, "
+        "hãy đưa ra MỘT truy vấn tìm kiếm ngắn (chỉ từ khóa). "
+        "Nếu không cần tra cứu, trả lời chính xác: KHÔNG."
+    )
+    try:
+        q = await llm.chat(
+            [{"role": "user", "content": q_prompt}],
+            provider_id=me.provider, temperature=0.2, max_tokens=40,
+        )
+    except llm.LLMError:
+        return None
+    q = q.strip().strip('"').strip()
+    if not q or q.upper().startswith("KHÔNG") or q.upper().startswith("KHONG"):
+        return None
+    results = await search.web_search(q, max_results=4)
+    formatted = search.format_results(results)
+    if not formatted:
+        return None
+    return {
+        "role": "system",
+        "content": (
+            f"Kết quả tra cứu web cho '{q}' (dùng làm dẫn chứng, có thể trích nguồn "
+            f"một cách tự nhiên, KHÔNG bịa thêm):\n{formatted}"
+        ),
+    }
+
+
 @app.post("/api/turn_stream")
 async def turn_stream(req: TurnRequest):
     me, messages = build_messages(req)
@@ -134,6 +191,11 @@ async def turn_stream(req: TurnRequest):
             status_code=400,
             content={"error": f"Provider '{provider['label']}' chưa cấu hình API key."},
         )
+
+    search_msg = await maybe_search_context(req, me)
+    if search_msg:
+        # Chen ngay sau system goc de lam ngu canh cho luot noi
+        messages.insert(1, search_msg)
 
     async def gen():
         try:
