@@ -41,6 +41,11 @@
         </label>
       </div>
 
+      <div class="options">
+        <label class="chk"><input type="checkbox" id="ttsOn" /> 🔊 Đọc to lời thoại</label>
+        <label class="chk"><input type="checkbox" id="memOn" /> 🧠 Tự cập nhật bộ nhớ sau phiên</label>
+      </div>
+
       <div class="buttons">
         <button id="startBtn">▶ Bắt đầu</button>
         <button id="continueBtn" disabled>⏩ Tiếp tục</button>
@@ -53,10 +58,15 @@
         <button class="save" data-fmt="txt" disabled>.txt</button>
         <button class="save" data-fmt="md" disabled>.md</button>
         <button class="save" data-fmt="json" disabled>.json</button>
+        <button id="copyBtn" class="mini" disabled>📋 Sao chép</button>
+        <button id="shareBtn" class="mini" disabled>🔗 Chia sẻ link</button>
+        <button id="scoreBtn" class="mini" disabled>🏆 Chấm điểm</button>
         <span class="sep">|</span>
         <span id="sessionInfo" class="session-info"></span>
         <button id="forgetBtn" class="mini">Xóa phiên đã lưu</button>
       </div>
+
+      <div id="scoreResult" class="score-result" hidden></div>
     </section>
 
     <section class="chat" id="chat"></section>
@@ -82,6 +92,11 @@
       <textarea class="a-persona" rows="3"></textarea>
       <label>Mục tiêu ngầm (tùy chọn)</label>
       <input class="a-goal" placeholder="vd: thuyết phục người khác tin vào điều gì đó" />
+      <details class="mem-box">
+        <summary>🧠 Bộ nhớ dài hạn</summary>
+        <textarea class="a-memory" rows="3" placeholder="Trống = chưa có ký ức. Sẽ tự điền sau mỗi phiên nếu bật bộ nhớ."></textarea>
+        <button class="mem-clear mini" type="button">Xóa bộ nhớ</button>
+      </details>
     </div>
   </template>
 

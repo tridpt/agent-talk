@@ -1,4 +1,7 @@
 """Backend FastAPI: nhieu agent tro chuyen nhom voi nhau."""
+import json
+import re
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +17,7 @@ class Agent(BaseModel):
     persona: str = ""
     provider: str = "default"
     goal: str = ""               # muc tieu ngam
+    memory: str = ""             # bo nho dai han (tu cac phien truoc)
 
 
 class TurnRequest(BaseModel):
@@ -35,6 +39,19 @@ class NextRequest(BaseModel):
 class SummarizeRequest(BaseModel):
     prev_summary: str = ""
     turns: list[dict] = []
+
+
+class ScoreRequest(BaseModel):
+    agents: list[Agent]
+    topic: str = ""
+    history: list[dict] = []
+
+
+class MemoryRequest(BaseModel):
+    agent: Agent
+    prev_memory: str = ""
+    topic: str = ""
+    history: list[dict] = []
 
 
 def _find(agents, name):
@@ -65,9 +82,16 @@ def build_messages(req: TurnRequest):
             f"cuộc trò chuyện về phía đó): {me.goal.strip()}"
         )
 
+    memory_line = ""
+    if me.memory.strip():
+        memory_line = (
+            f"\nĐiều bạn còn nhớ từ những cuộc trò chuyện trước (hãy dùng tự nhiên "
+            f"khi phù hợp): {me.memory.strip()}"
+        )
+
     system = (
         f"Bạn là {me.name}. {me.persona}\n"
-        f"{who}{topic_line}{goal_line}\n"
+        f"{who}{topic_line}{goal_line}{memory_line}\n"
         "Hãy trả lời tự nhiên, ngắn gọn (2-4 câu), bằng tiếng Việt CÓ DẤU đầy đủ, "
         "đúng tính cách của bạn. Chỉ nói lời thoại của bạn, không mô tả hành động, "
         "không viết tên mình ở đầu câu, không đóng vai người khác. "
@@ -176,6 +200,81 @@ async def summarize(req: SummarizeRequest):
     except llm.LLMError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     return {"summary": text}
+
+
+@app.post("/api/score")
+async def score(req: ScoreRequest):
+    """Cham diem cac agent dua tren do thuyet phuc trong cuoc tro chuyen."""
+    names = [a.name for a in req.agents]
+    convo = "\n".join(f'{t.get("name","")}: {t.get("text","")}' for t in req.history)
+    if not convo.strip():
+        return JSONResponse(status_code=400, content={"error": "Chưa có hội thoại để chấm điểm."})
+
+    topic_line = f"Chủ đề: {req.topic}.\n" if req.topic.strip() else ""
+    prompt = (
+        "Bạn là trọng tài trung lập. Dưới đây là một cuộc trò chuyện nhóm.\n"
+        f"{topic_line}Các thành viên: {', '.join(names)}.\n\n"
+        f"Hội thoại:\n{convo}\n\n"
+        "Hãy chấm điểm độ THUYẾT PHỤC của mỗi thành viên trên thang 0-10 "
+        "(dựa trên lập luận, bằng chứng, sự mạch lạc và khả năng tác động). "
+        "Chỉ trả về JSON hợp lệ dạng: "
+        '{"scores":[{"name":"...","score":0,"reason":"lý do ngắn"}],'
+        '"winner":"tên người thuyết phục nhất"}. '
+        "Không kèm văn bản nào khác ngoài JSON."
+    )
+    try:
+        raw = await llm.chat(
+            [{"role": "user", "content": prompt}], temperature=0.2, max_tokens=500
+        )
+    except llm.LLMError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    # Trich xuat JSON (phong khi model bao quanh bang ```json ... ```)
+    text = raw.strip()
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if m:
+        text = m.group(0)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return JSONResponse(
+            status_code=502,
+            content={"error": "Không phân tích được kết quả chấm điểm.", "raw": raw[:500]},
+        )
+    return data
+
+
+@app.post("/api/distill_memory")
+async def distill_memory(req: MemoryRequest):
+    """Chat loc 'bo nho dai han' cho mot agent tu cuoc tro chuyen vua dien ra."""
+    me = req.agent
+    convo = "\n".join(f'{t.get("name","")}: {t.get("text","")}' for t in req.history)
+    if not convo.strip():
+        return {"memory": req.prev_memory}
+
+    prompt = (
+        f"Bạn đang giúp nhân vật tên {me.name} ghi lại trí nhớ dài hạn.\n"
+        f"Tính cách của {me.name}: {me.persona or '(không rõ)'}\n"
+    )
+    if req.prev_memory.strip():
+        prompt += f"\nTrí nhớ hiện có: {req.prev_memory.strip()}\n"
+    prompt += (
+        f"\nCuộc trò chuyện vừa diễn ra:\n{convo}\n\n"
+        f"Hãy viết lại trí nhớ dài hạn của {me.name} (tối đa 5 gạch đầu dòng ngắn, "
+        "tiếng Việt có dấu) — giữ lại quan điểm cá nhân, điều đã học được, "
+        "mối quan hệ và cảm nhận về những người khác. Gộp với trí nhớ cũ, "
+        "bỏ chi tiết vụn vặt. Chỉ trả về nội dung trí nhớ, không lời dẫn."
+    )
+    try:
+        text = await llm.chat(
+            [{"role": "user", "content": prompt}],
+            provider_id=me.provider,
+            temperature=0.3,
+            max_tokens=350,
+        )
+    except llm.LLMError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    return {"memory": text}
 
 
 @app.get("/api/config")

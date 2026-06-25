@@ -22,7 +22,8 @@ const DEFAULT_AGENTS = [
 // ---------- Khởi tạo ----------
 async function init() {
   await loadProviders();
-  if (!restoreSession()) {
+  const fromShare = loadFromShare();
+  if (!fromShare && !restoreSession()) {
     DEFAULT_AGENTS.forEach(addAgentCard);
   }
   bindEvents();
@@ -46,6 +47,12 @@ function addAgentCard(data = {}) {
   node.querySelector(".a-name").value = data.name || `Agent ${idx + 1}`;
   node.querySelector(".a-persona").value = data.persona || "";
   node.querySelector(".a-goal").value = data.goal || "";
+  node.querySelector(".a-memory").value = data.memory || "";
+
+  node.querySelector(".mem-clear").addEventListener("click", () => {
+    node.querySelector(".a-memory").value = "";
+    saveSession();
+  });
 
   const prov = node.querySelector(".a-provider");
   providers.forEach((p) => {
@@ -88,6 +95,7 @@ function getAgents() {
     persona: c.querySelector(".a-persona").value.trim(),
     provider: c.querySelector(".a-provider").value || "default",
     goal: c.querySelector(".a-goal").value.trim(),
+    memory: c.querySelector(".a-memory").value.trim(),
   }));
 }
 
@@ -137,6 +145,41 @@ function scrollChat() {
 const escapeHtml = (s) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- Đọc to (Text-to-Speech) ----------
+const tts = {
+  voices: [],
+  supported: "speechSynthesis" in window,
+  load() {
+    if (!this.supported) return;
+    this.voices = speechSynthesis.getVoices();
+  },
+  // Chọn giọng ổn định theo tên agent (ưu tiên giọng tiếng Việt nếu có)
+  voiceFor(name) {
+    if (!this.voices.length) this.load();
+    if (!this.voices.length) return null;
+    const vi = this.voices.filter((v) => /vi[-_]?/i.test(v.lang));
+    const pool = vi.length ? vi : this.voices;
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return pool[h % pool.length];
+  },
+  speak(name, text) {
+    if (!this.supported || !$("ttsOn").checked || !text.trim()) return;
+    const u = new SpeechSynthesisUtterance(text);
+    const v = this.voiceFor(name);
+    if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = "vi-VN"; }
+    u.rate = 1; u.pitch = 1;
+    speechSynthesis.speak(u);
+  },
+  stop() {
+    if (this.supported) speechSynthesis.cancel();
+  },
+};
+if (tts.supported) {
+  tts.load();
+  speechSynthesis.onvoiceschanged = () => tts.load();
+}
 
 // ---------- Tóm tắt khi dài ----------
 async function maybeSummarize() {
@@ -226,18 +269,23 @@ async function loop(firstSpeaker) {
     for (let i = 0; i < maxTurns && running; i++) {
       await maybeSummarize();
       const target = newBubble(speaker);
+      const bubbleEl = target.closest(".bubble");
+      bubbleEl.classList.add("speaking");
       const text = await streamTurn(speaker, target);
-      if (!running) { if (!text) target.closest(".bubble").remove(); break; }
-      if (!text) { target.closest(".bubble").remove(); break; }
+      bubbleEl.classList.remove("speaking");
+      if (!running) { if (!text) bubbleEl.remove(); break; }
+      if (!text) { bubbleEl.remove(); break; }
       history.push({ name: speaker, text, kind: "agent" });
       lastSpeaker = speaker;
       saveSession();
+      tts.speak(speaker, text);
       speaker = await pickNext(speaker);
       if (delayMs && running && i < maxTurns - 1) await sleep(delayMs);
     }
   } catch (e) {
     addError(e.message);
   }
+  await updateMemories();
   stop();
 }
 
@@ -259,6 +307,7 @@ async function cont() {
 
 function stop() {
   running = false;
+  tts.stop();
   refreshUi();
   saveSession();
 }
@@ -294,6 +343,7 @@ function refreshUi() {
   ["maxTurns", "delay", "temp", "orderMode"].forEach((id) => ($(id).disabled = running));
   $("agents").querySelectorAll("input, textarea, select, button").forEach((el) => (el.disabled = running));
   document.querySelectorAll("button.save").forEach((b) => (b.disabled = history.length === 0 || running));
+  ["copyBtn", "shareBtn", "scoreBtn"].forEach((id) => ($(id).disabled = history.length === 0 || running));
 }
 
 // ---------- Lưu / khôi phục phiên (localStorage) ----------
@@ -305,6 +355,8 @@ function sessionData() {
     maxTurns: $("maxTurns").value,
     delay: $("delay").value,
     temp: $("temp").value,
+    ttsOn: $("ttsOn").checked,
+    memOn: $("memOn").checked,
     history, summary, summarizedCount, lastSpeaker,
     savedAt: new Date().toISOString(),
   };
@@ -329,6 +381,8 @@ function restoreSession() {
   if (d.maxTurns) $("maxTurns").value = d.maxTurns;
   if (d.delay !== undefined) $("delay").value = d.delay;
   if (d.temp !== undefined) $("temp").value = d.temp;
+  if (d.ttsOn !== undefined) $("ttsOn").checked = d.ttsOn;
+  if (d.memOn !== undefined) $("memOn").checked = d.memOn;
   history = d.history || [];
   summary = d.summary || "";
   summarizedCount = d.summarizedCount || 0;
@@ -381,6 +435,150 @@ function save(fmt) {
   URL.revokeObjectURL(url);
 }
 
+// ---------- Bộ nhớ dài hạn ----------
+async function updateMemories() {
+  if (!$("memOn").checked || history.length === 0) return;
+  const agents = getAgents();
+  const cards = [...$("agents").children];
+  setStatus("🧠 Đang cập nhật bộ nhớ...");
+  const turns = history.map((h) => ({ name: h.name, text: h.text }));
+  await Promise.all(
+    agents.map(async (a, i) => {
+      try {
+        const r = await fetch("/api/distill_memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agent: a, prev_memory: a.memory, topic: $("topic").value, history: turns,
+          }),
+        });
+        const j = await r.json();
+        if (r.ok && j.memory && cards[i]) {
+          cards[i].querySelector(".a-memory").value = j.memory.trim();
+        }
+      } catch (e) { /* bo qua */ }
+    })
+  );
+  setStatus("");
+  saveSession();
+}
+
+// ---------- Sao chép hội thoại ----------
+async function copyConversation() {
+  if (history.length === 0) return;
+  try {
+    await navigator.clipboard.writeText(buildContent("txt"));
+    flash($("copyBtn"), "✅ Đã chép");
+  } catch (e) {
+    flash($("copyBtn"), "✕ Lỗi chép");
+  }
+}
+
+// ---------- Chia sẻ qua link ----------
+const b64encode = (s) => btoa(unescape(encodeURIComponent(s)));
+const b64decode = (s) => decodeURIComponent(escape(atob(s)));
+
+async function shareLink() {
+  if (history.length === 0) return;
+  const payload = {
+    agents: getAgents().map(({ memory, ...rest }) => rest), // khong chia se bo nho rieng tu
+    topic: $("topic").value,
+    history,
+    summary, summarizedCount, lastSpeaker,
+  };
+  let code;
+  try { code = b64encode(JSON.stringify(payload)); }
+  catch (e) { return flash($("shareBtn"), "✕ Lỗi"); }
+  const url = `${location.origin}${location.pathname}#share=${code}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    flash($("shareBtn"), url.length > 8000 ? "⚠ Link dài, đã chép" : "✅ Đã chép link");
+  } catch (e) {
+    prompt("Sao chép link chia sẻ:", url);
+  }
+}
+
+function loadFromShare() {
+  const m = location.hash.match(/#share=(.+)$/);
+  if (!m) return false;
+  let d;
+  try { d = JSON.parse(b64decode(m[1])); } catch (e) { return false; }
+  if (!d || !d.agents) return false;
+  if (history.length && !confirm("Mở phiên được chia sẻ? Phiên hiện tại sẽ bị thay thế.")) return false;
+
+  $("agents").innerHTML = "";
+  d.agents.forEach(addAgentCard);
+  if (d.topic !== undefined) $("topic").value = d.topic;
+  history = d.history || [];
+  summary = d.summary || "";
+  summarizedCount = d.summarizedCount || 0;
+  lastSpeaker = d.lastSpeaker || "";
+  renderHistory();
+  // Xoa hash khoi URL de tranh tai lai khi reload, va luu phien
+  window.history.replaceState(null, "", location.pathname);
+  saveSession();
+  refreshUi();
+  return true;
+}
+
+// ---------- Chấm điểm ----------
+async function scoreConversation() {
+  if (history.length === 0 || running) return;
+  const box = $("scoreResult");
+  box.hidden = false;
+  box.innerHTML = '<p class="score-loading">⏳ Đang chấm điểm...</p>';
+  try {
+    const r = await fetch("/api/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agents: getAgents(),
+        topic: $("topic").value,
+        history: history.map((h) => ({ name: h.name, text: h.text })),
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok) { box.innerHTML = `<p class="score-err">${escapeHtml(j.error || "Lỗi chấm điểm")}</p>`; return; }
+    renderScore(j);
+  } catch (e) {
+    box.innerHTML = `<p class="score-err">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderScore(data) {
+  const box = $("scoreResult");
+  const scores = (data.scores || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+  let html = '<h3>🏆 Kết quả chấm điểm</h3><div class="score-list">';
+  scores.forEach((s) => {
+    const win = data.winner && s.name === data.winner;
+    const pct = Math.max(0, Math.min(100, (s.score || 0) * 10));
+    html += `
+      <div class="score-item${win ? " winner" : ""}">
+        <div class="score-top">
+          <span class="score-name" style="color:${colorFor(s.name)}">${escapeHtml(s.name)}${win ? " 👑" : ""}</span>
+          <span class="score-num">${s.score ?? "?"}/10</span>
+        </div>
+        <div class="score-bar"><span style="width:${pct}%;background:${colorFor(s.name)}"></span></div>
+        ${s.reason ? `<p class="score-reason">${escapeHtml(s.reason)}</p>` : ""}
+      </div>`;
+  });
+  html += "</div>";
+  if (data.winner) html += `<p class="score-winner">Thuyết phục nhất: <b>${escapeHtml(data.winner)}</b></p>`;
+  box.innerHTML = html;
+}
+
+// ---------- Tiện ích UI ----------
+function setStatus(msg) {
+  if (msg) $("sessionInfo").textContent = msg;
+  else updateSessionInfo();
+}
+
+function flash(btn, msg) {
+  const old = btn.textContent;
+  btn.textContent = msg;
+  setTimeout(() => { btn.textContent = old; }, 1500);
+}
+
 // ---------- Sự kiện ----------
 function bindEvents() {
   $("addAgentBtn").addEventListener("click", () => { addAgentCard(); saveSession(); });
@@ -391,6 +589,11 @@ function bindEvents() {
   $("forgetBtn").addEventListener("click", forgetSession);
   $("interjectBtn").addEventListener("click", interject);
   $("interjectInput").addEventListener("keydown", (e) => { if (e.key === "Enter") interject(); });
+  $("copyBtn").addEventListener("click", copyConversation);
+  $("shareBtn").addEventListener("click", shareLink);
+  $("scoreBtn").addEventListener("click", scoreConversation);
+  $("ttsOn").addEventListener("change", () => { if (!$("ttsOn").checked) tts.stop(); saveSession(); });
+  $("memOn").addEventListener("change", saveSession);
   ["topic", "orderMode", "maxTurns", "delay", "temp"].forEach((id) =>
     $(id).addEventListener("input", saveSession)
   );

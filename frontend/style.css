@@ -94,3 +94,52 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   .agents { grid-template-columns: 1fr; }
   .bubble { max-width: 92%; }
 }
+
+/* ----- Tùy chọn (toggle) ----- */
+.options { display: flex; gap: 18px; flex-wrap: wrap; margin: 0 0 16px; }
+.options .chk {
+  display: flex; align-items: center; gap: 8px; margin: 0;
+  font-size: .9rem; color: var(--text); cursor: pointer;
+}
+.options .chk input { width: auto; cursor: pointer; }
+
+/* ----- Bộ nhớ trong agent card ----- */
+.mem-box { margin-top: 10px; }
+.mem-box summary {
+  cursor: pointer; font-size: .82rem; color: var(--muted);
+  user-select: none; padding: 2px 0;
+}
+.mem-box summary:hover { color: var(--text); }
+.mem-box textarea { margin-top: 6px; font-size: .82rem; }
+.mem-box .mem-clear { margin-top: 6px; background: #3a2030; }
+
+/* ----- Nút mini phụ trong save-row ----- */
+.save-row #copyBtn, .save-row #shareBtn, .save-row #scoreBtn { background: #243056; }
+.save-row #scoreBtn { background: #3a2f12; }
+
+/* ----- Hiệu ứng "đang nói" ----- */
+.bubble.speaking .txt::after {
+  content: "▋"; display: inline-block; margin-left: 2px;
+  color: var(--c); animation: blink 1s steps(2, start) infinite;
+}
+@keyframes blink { to { visibility: hidden; } }
+
+/* ----- Kết quả chấm điểm ----- */
+.score-result {
+  margin-top: 16px; background: #12172b; border: 1px solid #2a3150;
+  border-radius: 12px; padding: 16px;
+}
+.score-result h3 { font-size: 1rem; margin-bottom: 12px; }
+.score-loading, .score-err { color: var(--muted); font-size: .9rem; }
+.score-err { color: #fca5a5; }
+.score-list { display: flex; flex-direction: column; gap: 12px; }
+.score-item { background: #0c1020; border-radius: 10px; padding: 10px 12px; }
+.score-item.winner { box-shadow: 0 0 0 2px #fbbf24 inset; }
+.score-top { display: flex; justify-content: space-between; align-items: baseline; }
+.score-name { font-weight: 700; }
+.score-num { font-weight: 700; color: var(--text); }
+.score-bar { height: 8px; background: #1a1f35; border-radius: 6px; overflow: hidden; margin: 6px 0; }
+.score-bar span { display: block; height: 100%; border-radius: 6px; transition: width .4s ease; }
+.score-reason { font-size: .85rem; color: var(--muted); }
+.score-winner { margin-top: 12px; font-size: .95rem; text-align: center; }
+.score-winner b { color: #fbbf24; }
