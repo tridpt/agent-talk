@@ -15,7 +15,8 @@ Không cần GPU. Dùng API LLM free (Groq / Gemini / OpenRouter).
 - **Tự tóm tắt** khi hội thoại dài để không vỡ ngữ cảnh.
 - **Đọc to (TTS)**: bật để nghe agent "nói" bằng giọng trình duyệt, mỗi agent một giọng.
 - **Bộ nhớ dài hạn**: agent tự ghi nhớ điều đã học sau mỗi phiên và dùng lại ở phiên sau.
-- **Chấm điểm**: trọng tài AI chấm độ thuyết phục của từng agent và chọn người thắng.
+- **Chấm điểm đa tiêu chí**: trọng tài AI chấm từng agent theo logic, bằng chứng, sáng tạo, thái độ và chọn người thắng.
+- **Bảng xếp hạng tích lũy**: cộng dồn số lần thắng và điểm trung bình của mỗi agent qua nhiều phiên.
 - **Sao chép & chia sẻ**: chép nhanh hội thoại, hoặc tạo link chia sẻ cả phiên.
 - **Lưu phiên** tự động (localStorage) và **xuất file** `.txt` / `.md` / `.json`.
 - **Nhiều "bộ não"**: cấu hình 2 provider để mỗi agent dùng một LLM khác nhau.
@@ -78,7 +79,7 @@ Mở trình duyệt: http://127.0.0.1:8000
 
 ## Ý tưởng mở rộng
 
-- Đồng bộ phiên/bộ nhớ giữa nhiều thiết bị (hiện chỉ lưu cục bộ trên trình duyệt).
-- Cho phép nhiều "trọng tài" chấm điểm theo nhiều tiêu chí khác nhau.
-- Bảng xếp hạng tích lũy điểm thuyết phục qua nhiều phiên.
 - Cho agent chủ động tra cứu thông tin ngoài (web/tools) khi tranh luận.
+- Chế độ tranh biện có thể lệ (mở màn / phản biện / kết luận).
+- Lưu phiên ở server và chia sẻ bằng mã ngắn thay vì nhét cả phiên vào URL.
+- Đồng bộ phiên/bộ nhớ/bảng xếp hạng giữa nhiều thiết bị.

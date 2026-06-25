@@ -143,3 +143,31 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .score-reason { font-size: .85rem; color: var(--muted); }
 .score-winner { margin-top: 12px; font-size: .95rem; text-align: center; }
 .score-winner b { color: #fbbf24; }
+
+/* ----- Lưới tiêu chí trong kết quả chấm điểm ----- */
+.crit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 8px 0 2px; }
+.crit { display: flex; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
+.crit-label { flex: 0 0 95px; }
+.crit-bar { flex: 1; height: 6px; background: #1a1f35; border-radius: 4px; overflow: hidden; }
+.crit-bar i { display: block; height: 100%; border-radius: 4px; transition: width .4s ease; }
+.crit-num { flex: 0 0 20px; text-align: right; color: var(--text); font-weight: 600; }
+
+/* ----- Bảng xếp hạng tích lũy ----- */
+.leaderboard {
+  margin-top: 16px; background: #12172b; border: 1px solid #2a3150;
+  border-radius: 12px; padding: 16px;
+}
+.lb-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.lb-head h3 { font-size: 1rem; }
+.lb-head #lbClear { background: #3a2030; }
+.lb-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.lb-table th, .lb-table td { padding: 7px 8px; text-align: center; }
+.lb-table th { color: var(--muted); font-weight: 600; border-bottom: 1px solid #2a3150; }
+.lb-table td:nth-child(2), .lb-table th:nth-child(2) { text-align: left; }
+.lb-table tbody tr:nth-child(odd) { background: #0c1020; }
+.lb-table tbody tr:first-child td { font-size: .95rem; }
+
+@media (max-width: 640px) {
+  .crit-grid { grid-template-columns: 1fr; }
+  .crit-label { flex-basis: 90px; }
+}

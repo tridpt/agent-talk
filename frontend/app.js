@@ -2,6 +2,12 @@ const $ = (id) => document.getElementById(id);
 const SS_KEY = "agentTalkSession";
 const COLORS = ["#3b82f6", "#ec4899", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444"];
 const DIRECTOR = "Đạo diễn";
+const CRITS = [
+  { key: "logic", label: "Logic", icon: "🧩" },
+  { key: "evidence", label: "Bằng chứng", icon: "📊" },
+  { key: "creativity", label: "Sáng tạo", icon: "💡" },
+  { key: "attitude", label: "Thái độ", icon: "🤝" },
+];
 const SUMMARY_WINDOW = 16; // qua nguong nay thi tom tat bot
 const KEEP_RECENT = 8;     // so luot gan nhat luon giu nguyen van
 
@@ -28,6 +34,7 @@ async function init() {
   }
   bindEvents();
   refreshUi();
+  renderLeaderboard();
 }
 
 async function loadProviders() {
@@ -547,24 +554,108 @@ async function scoreConversation() {
 
 function renderScore(data) {
   const box = $("scoreResult");
-  const scores = (data.scores || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+  const crits = CRITS.filter((c) => (data.criteria || CRITS.map((x) => x.key)).includes(c.key));
+  const scores = (data.scores || []).slice().sort((a, b) => (b.overall || 0) - (a.overall || 0));
   let html = '<h3>🏆 Kết quả chấm điểm</h3><div class="score-list">';
   scores.forEach((s) => {
     const win = data.winner && s.name === data.winner;
-    const pct = Math.max(0, Math.min(100, (s.score || 0) * 10));
+    const overall = s.overall ?? 0;
+    const opct = Math.max(0, Math.min(100, overall * 10));
+    let crow = '<div class="crit-grid">';
+    crits.forEach((c) => {
+      const v = s[c.key];
+      const pct = Math.max(0, Math.min(100, (v || 0) * 10));
+      crow += `
+        <div class="crit">
+          <span class="crit-label">${c.icon} ${c.label}</span>
+          <span class="crit-bar"><i style="width:${pct}%;background:${colorFor(s.name)}"></i></span>
+          <span class="crit-num">${v ?? "?"}</span>
+        </div>`;
+    });
+    crow += "</div>";
     html += `
       <div class="score-item${win ? " winner" : ""}">
         <div class="score-top">
           <span class="score-name" style="color:${colorFor(s.name)}">${escapeHtml(s.name)}${win ? " 👑" : ""}</span>
-          <span class="score-num">${s.score ?? "?"}/10</span>
+          <span class="score-num">${overall}/10</span>
         </div>
-        <div class="score-bar"><span style="width:${pct}%;background:${colorFor(s.name)}"></span></div>
+        <div class="score-bar"><span style="width:${opct}%;background:${colorFor(s.name)}"></span></div>
+        ${crow}
         ${s.reason ? `<p class="score-reason">${escapeHtml(s.reason)}</p>` : ""}
       </div>`;
   });
   html += "</div>";
   if (data.winner) html += `<p class="score-winner">Thuyết phục nhất: <b>${escapeHtml(data.winner)}</b></p>`;
   box.innerHTML = html;
+
+  recordScore(data);
+}
+
+// ---------- Bảng xếp hạng tích lũy ----------
+const LB_KEY = "agentTalkLeaderboard";
+
+function loadLeaderboard() {
+  try { return JSON.parse(localStorage.getItem(LB_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+
+function recordScore(data) {
+  const lb = loadLeaderboard();
+  (data.scores || []).forEach((s) => {
+    const e = lb[s.name] || { sessions: 0, wins: 0, sumOverall: 0 };
+    e.sessions += 1;
+    e.sumOverall += Number(s.overall) || 0;
+    CRITS.forEach((c) => {
+      e["sum_" + c.key] = (e["sum_" + c.key] || 0) + (Number(s[c.key]) || 0);
+    });
+    if (data.winner && s.name === data.winner) e.wins += 1;
+    lb[s.name] = e;
+  });
+  try { localStorage.setItem(LB_KEY, JSON.stringify(lb)); } catch (e) {}
+  renderLeaderboard();
+}
+
+function renderLeaderboard() {
+  const box = $("leaderboard");
+  const lb = loadLeaderboard();
+  const rows = Object.entries(lb).map(([name, e]) => ({
+    name,
+    sessions: e.sessions,
+    wins: e.wins,
+    avg: e.sessions ? e.sumOverall / e.sessions : 0,
+  })).sort((a, b) => b.wins - a.wins || b.avg - a.avg);
+
+  if (rows.length === 0) { box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+
+  const medals = ["🥇", "🥈", "🥉"];
+  let html = `
+    <div class="lb-head">
+      <h3>📊 Bảng xếp hạng tích lũy</h3>
+      <button id="lbClear" class="mini">Xóa bảng</button>
+    </div>
+    <table class="lb-table">
+      <thead><tr><th>#</th><th>Tên</th><th>Thắng</th><th>Phiên</th><th>Điểm TB</th></tr></thead>
+      <tbody>`;
+  rows.forEach((r, i) => {
+    html += `
+      <tr>
+        <td>${medals[i] || i + 1}</td>
+        <td style="color:${colorFor(r.name)};font-weight:700">${escapeHtml(r.name)}</td>
+        <td>${r.wins}</td>
+        <td>${r.sessions}</td>
+        <td>${r.avg.toFixed(1)}</td>
+      </tr>`;
+  });
+  html += "</tbody></table>";
+  box.innerHTML = html;
+  $("lbClear").addEventListener("click", clearLeaderboard);
+}
+
+function clearLeaderboard() {
+  if (!confirm("Xóa toàn bộ bảng xếp hạng tích lũy?")) return;
+  localStorage.removeItem(LB_KEY);
+  renderLeaderboard();
 }
 
 // ---------- Tiện ích UI ----------

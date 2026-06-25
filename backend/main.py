@@ -204,7 +204,7 @@ async def summarize(req: SummarizeRequest):
 
 @app.post("/api/score")
 async def score(req: ScoreRequest):
-    """Cham diem cac agent dua tren do thuyet phuc trong cuoc tro chuyen."""
+    """Cham diem cac agent theo nhieu tieu chi trong cuoc tro chuyen."""
     names = [a.name for a in req.agents]
     convo = "\n".join(f'{t.get("name","")}: {t.get("text","")}' for t in req.history)
     if not convo.strip():
@@ -215,16 +215,22 @@ async def score(req: ScoreRequest):
         "Bạn là trọng tài trung lập. Dưới đây là một cuộc trò chuyện nhóm.\n"
         f"{topic_line}Các thành viên: {', '.join(names)}.\n\n"
         f"Hội thoại:\n{convo}\n\n"
-        "Hãy chấm điểm độ THUYẾT PHỤC của mỗi thành viên trên thang 0-10 "
-        "(dựa trên lập luận, bằng chứng, sự mạch lạc và khả năng tác động). "
+        "Hãy chấm điểm mỗi thành viên trên thang 0-10 theo BỐN tiêu chí:\n"
+        "- logic: lập luận chặt chẽ, mạch lạc\n"
+        "- evidence: dùng bằng chứng, ví dụ, dữ kiện cụ thể\n"
+        "- creativity: góc nhìn mới mẻ, sáng tạo\n"
+        "- attitude: thái độ tôn trọng, xây dựng, lắng nghe\n"
         "Chỉ trả về JSON hợp lệ dạng: "
-        '{"scores":[{"name":"...","score":0,"reason":"lý do ngắn"}],'
-        '"winner":"tên người thuyết phục nhất"}. '
+        '{"criteria":["logic","evidence","creativity","attitude"],'
+        '"scores":[{"name":"...","logic":0,"evidence":0,"creativity":0,'
+        '"attitude":0,"overall":0,"reason":"nhận xét ngắn"}],'
+        '"winner":"tên người thuyết phục nhất tổng thể"}. '
+        '"overall" là điểm trung bình bốn tiêu chí (0-10). '
         "Không kèm văn bản nào khác ngoài JSON."
     )
     try:
         raw = await llm.chat(
-            [{"role": "user", "content": prompt}], temperature=0.2, max_tokens=500
+            [{"role": "user", "content": prompt}], temperature=0.2, max_tokens=700
         )
     except llm.LLMError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
@@ -241,6 +247,24 @@ async def score(req: ScoreRequest):
             status_code=502,
             content={"error": "Không phân tích được kết quả chấm điểm.", "raw": raw[:500]},
         )
+
+    # Chuan hoa: dam bao co 'overall' va 'criteria' (phong khi model bo sot)
+    crits = ["logic", "evidence", "creativity", "attitude"]
+    data.setdefault("criteria", crits)
+    for s in data.get("scores", []):
+        vals = []
+        for c in crits:
+            try:
+                v = float(s.get(c))
+                s[c] = round(v, 1)
+                vals.append(v)
+            except (TypeError, ValueError):
+                s[c] = None
+        if s.get("overall") is None and vals:
+            s["overall"] = round(sum(vals) / len(vals), 1)
+    if not data.get("winner") and data.get("scores"):
+        best = max(data["scores"], key=lambda x: x.get("overall") or 0)
+        data["winner"] = best.get("name")
     return data
 
 
