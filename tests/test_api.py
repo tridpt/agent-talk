@@ -120,7 +120,7 @@ def test_turn_stream(client, monkeypatch):
             yield chunk
 
     async def no_search(req, me):
-        return None
+        return None, []
 
     monkeypatch.setattr(main.llm, "chat_stream", fake_stream)
     monkeypatch.setattr(main, "maybe_search_context", no_search)
@@ -133,3 +133,27 @@ def test_turn_stream(client, monkeypatch):
     })
     assert r.status_code == 200
     assert r.text == "Xin chào mọi người."
+
+
+# ---------- /api/session (luu & doc phien chia se) ----------
+def test_session_save_and_get(client):
+    payload = {"topic": "demo", "history": [{"name": "Lan", "text": "xin chào"}]}
+    r = client.post("/api/session/save", json=payload)
+    assert r.status_code == 200
+    sid = r.json()["id"]
+    assert sid
+
+    r2 = client.get(f"/api/session/{sid}")
+    assert r2.status_code == 200
+    assert r2.json()["topic"] == "demo"
+
+
+def test_session_get_not_found(client):
+    r = client.get("/api/session/khongtontai123")
+    assert r.status_code == 404
+
+
+def test_session_get_invalid_id(client):
+    r = client.get("/api/session/..%2Fetc")
+    # Ma khong hop le hoac khong tim thay -> khong duoc 200
+    assert r.status_code in (400, 404)

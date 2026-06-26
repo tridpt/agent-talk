@@ -18,7 +18,8 @@ Không cần GPU. Dùng API LLM free (Groq / Gemini / OpenRouter).
 - **Chấm điểm đa tiêu chí**: trọng tài AI chấm từng agent theo logic, bằng chứng, sáng tạo, thái độ và chọn người thắng.
 - **Bảng xếp hạng tích lũy**: cộng dồn số lần thắng và điểm trung bình của mỗi agent qua nhiều phiên.
 - **Tra cứu web**: bật để agent tìm dẫn chứng thật trước khi nói (DuckDuckGo miễn phí, hoặc Tavily nếu có key).
-- **Sao chép & chia sẻ**: chép nhanh hội thoại, hoặc tạo link chia sẻ cả phiên.
+- **Sao chép & chia sẻ**: chép nhanh hội thoại, hoặc tạo **link ngắn** chia sẻ cả phiên (lưu ở server).
+- **Nguồn tra cứu**: câu nào dùng dữ liệu web sẽ kèm footnote link nguồn để kiểm chứng.
 - **Lưu phiên** tự động (localStorage) và **xuất file** `.txt` / `.md` / `.json`.
 - **Nhiều "bộ não"**: cấu hình 2 provider để mỗi agent dùng một LLM khác nhau.
 
@@ -97,7 +98,10 @@ docker run -p 8000:8000 -e LLM_API_KEY=dan_key_cua_ban agent-talk
 
 ## Ý tưởng mở rộng
 
-- Lưu phiên ở server và chia sẻ bằng mã ngắn thay vì nhét cả phiên vào URL.
 - Đồng bộ phiên/bộ nhớ/bảng xếp hạng giữa nhiều thiết bị.
-- Hiển thị rõ nguồn tra cứu (footnote) dưới mỗi câu có dẫn chứng.
 - Cho người xem bình chọn song song với trọng tài AI.
+- Hết hạn (TTL) cho phiên chia sẻ để dọn `storage/sessions` tự động.
+
+> ⚠️ **Lưu ý bảo mật**: endpoint chia sẻ phiên (`/api/session/*`) hiện **không có xác thực** —
+> ai có mã đều đọc được phiên. Phù hợp khi chạy cục bộ. Nếu triển khai công khai ra internet,
+> nên thêm xác thực/giới hạn tần suất và cơ chế hết hạn phiên.

@@ -1,6 +1,9 @@
 """Backend FastAPI: nhieu agent tro chuyen nhom voi nhau."""
 import json
 import re
+import uuid
+from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -10,6 +13,11 @@ from pydantic import BaseModel
 from . import config, llm, search
 
 app = FastAPI(title="Agent Talk")
+
+# Thu muc luu phien chia se (tao neu chua co)
+SESSION_DIR = config.FRONTEND_DIR.parent / "storage" / "sessions"
+SESSION_DIR.mkdir(parents=True, exist_ok=True)
+MAX_SESSION_BYTES = 1_000_000  # ~1MB, tranh lam dung
 
 
 class Agent(BaseModel):
@@ -145,10 +153,10 @@ def build_messages(req: TurnRequest):
 
 
 async def maybe_search_context(req: TurnRequest, me: Agent):
-    """Neu allow_search: nho LLM nghi 1 truy van, tra cuu web, tra ve system message.
-    Khong bao gio raise — loi gi cung tra ve None de luot noi van chay binh thuong."""
+    """Neu allow_search: nho LLM nghi 1 truy van, tra cuu web.
+    Tra ve (system_message_or_None, results_list). Khong bao gio raise."""
     if not req.allow_search:
-        return None
+        return None, []
     recent = req.history[-6:]
     convo = "\n".join(f'{t.get("name","")}: {t.get("text","")}' for t in recent)
     q_prompt = (
@@ -164,21 +172,22 @@ async def maybe_search_context(req: TurnRequest, me: Agent):
             provider_id=me.provider, temperature=0.2, max_tokens=40,
         )
     except llm.LLMError:
-        return None
+        return None, []
     q = q.strip().strip('"').strip()
     if not q or q.upper().startswith("KHÔNG") or q.upper().startswith("KHONG"):
-        return None
+        return None, []
     results = await search.web_search(q, max_results=4)
     formatted = search.format_results(results)
     if not formatted:
-        return None
-    return {
+        return None, []
+    msg = {
         "role": "system",
         "content": (
             f"Kết quả tra cứu web cho '{q}' (dùng làm dẫn chứng, có thể trích nguồn "
             f"một cách tự nhiên, KHÔNG bịa thêm):\n{formatted}"
         ),
     }
+    return msg, results
 
 
 @app.post("/api/turn_stream")
@@ -192,7 +201,7 @@ async def turn_stream(req: TurnRequest):
             content={"error": f"Provider '{provider['label']}' chưa cấu hình API key."},
         )
 
-    search_msg = await maybe_search_context(req, me)
+    search_msg, results = await maybe_search_context(req, me)
     if search_msg:
         # Chen ngay sau system goc de lam ngu canh cho luot noi
         messages.insert(1, search_msg)
@@ -206,7 +215,12 @@ async def turn_stream(req: TurnRequest):
         except llm.LLMError as e:
             yield f"\n[LỖI] {e}"
 
-    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8")
+    headers = {}
+    if results:
+        # Gui nguon ve frontend qua header (chi giu title + url cho gon)
+        slim = [{"title": r["title"], "url": r["url"]} for r in results if r.get("url")]
+        headers["X-Sources"] = quote(json.dumps(slim, ensure_ascii=False))
+    return StreamingResponse(gen(), media_type="text/plain; charset=utf-8", headers=headers)
 
 
 @app.post("/api/next_speaker")
@@ -361,6 +375,35 @@ async def distill_memory(req: MemoryRequest):
     except llm.LLMError as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
     return {"memory": text}
+
+
+@app.post("/api/session/save")
+async def save_session(payload: dict):
+    """Luu mot phien chia se, tra ve ma ngan de tao link."""
+    blob = json.dumps(payload, ensure_ascii=False)
+    if len(blob.encode("utf-8")) > MAX_SESSION_BYTES:
+        return JSONResponse(status_code=413, content={"error": "Phiên quá lớn để chia sẻ."})
+    sid = uuid.uuid4().hex[:10]
+    try:
+        (SESSION_DIR / f"{sid}.json").write_text(blob, encoding="utf-8")
+    except OSError as e:
+        return JSONResponse(status_code=500, content={"error": f"Không lưu được phiên: {e}"})
+    return {"id": sid}
+
+
+@app.get("/api/session/{sid}")
+async def get_session(sid: str):
+    """Doc lai phien da chia se theo ma."""
+    # Chi cho phep ma an toan (chu/so) de tranh path traversal
+    if not re.fullmatch(r"[A-Za-z0-9]{1,32}", sid):
+        return JSONResponse(status_code=400, content={"error": "Mã không hợp lệ."})
+    path = SESSION_DIR / f"{sid}.json"
+    if not path.exists():
+        return JSONResponse(status_code=404, content={"error": "Không tìm thấy phiên."})
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return JSONResponse(status_code=500, content={"error": "Phiên bị lỗi."})
 
 
 @app.get("/api/config")

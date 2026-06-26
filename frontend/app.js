@@ -28,7 +28,7 @@ const DEFAULT_AGENTS = [
 // ---------- Khởi tạo ----------
 async function init() {
   await loadProviders();
-  const fromShare = loadFromShare();
+  const fromShare = await loadFromShare();
   if (!fromShare && !restoreSession()) {
     DEFAULT_AGENTS.forEach(addAgentCard);
   }
@@ -141,7 +141,25 @@ function renderHistory() {
   history.forEach((h) => {
     const t = newBubble(h.name);
     t.textContent = h.text;
+    if (h.sources && h.sources.length) renderSources(t.closest(".bubble"), h.sources);
   });
+}
+
+// Hien thi footnote nguon tra cuu duoi mot bong bong
+function renderSources(bubbleEl, sources) {
+  if (!bubbleEl || !sources || !sources.length) return;
+  const div = document.createElement("div");
+  div.className = "sources";
+  const items = sources.map((s, i) => {
+    const safe = /^https?:\/\//i.test(s.url || "");
+    const label = `[${i + 1}] ${escapeHtml(s.title || s.url || "nguồn")}`;
+    return safe
+      ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : `<span>${label}</span>`;
+  });
+  div.innerHTML = "🔎 Nguồn: " + items.join(" · ");
+  bubbleEl.appendChild(div);
+  scrollChat();
 }
 
 function scrollChat() {
@@ -229,6 +247,9 @@ async function streamTurn(speaker, target, phase = "") {
     try { const j = await resp.json(); if (j.error) msg = j.error; } catch (_) {}
     throw new Error(msg);
   }
+  let sources = [];
+  const sh = resp.headers.get("X-Sources");
+  if (sh) { try { sources = JSON.parse(decodeURIComponent(sh)); } catch (_) {} }
   const reader = resp.body.getReader();
   const dec = new TextDecoder();
   let full = "";
@@ -240,7 +261,7 @@ async function streamTurn(speaker, target, phase = "") {
     scrollChat();
     if (!running) { reader.cancel(); break; }
   }
-  return full.trim();
+  return { text: full.trim(), sources };
 }
 
 async function pickNext(speaker) {
@@ -280,11 +301,12 @@ async function loop(firstSpeaker) {
       const target = newBubble(speaker);
       const bubbleEl = target.closest(".bubble");
       bubbleEl.classList.add("speaking");
-      const text = await streamTurn(speaker, target);
+      const { text, sources } = await streamTurn(speaker, target);
       bubbleEl.classList.remove("speaking");
       if (!running) { if (!text) bubbleEl.remove(); break; }
       if (!text) { bubbleEl.remove(); break; }
-      history.push({ name: speaker, text, kind: "agent" });
+      renderSources(bubbleEl, sources);
+      history.push({ name: speaker, text, kind: "agent", sources });
       lastSpeaker = speaker;
       saveSession();
       tts.speak(speaker, text);
@@ -339,11 +361,12 @@ async function debateLoop() {
         const target = newBubble(a.name);
         const bubbleEl = target.closest(".bubble");
         bubbleEl.classList.add("speaking");
-        const text = await streamTurn(a.name, target, phase.key);
+        const { text, sources } = await streamTurn(a.name, target, phase.key);
         bubbleEl.classList.remove("speaking");
         if (!running) { if (!text) bubbleEl.remove(); break; }
         if (!text) { bubbleEl.remove(); continue; }
-        history.push({ name: a.name, text, kind: "agent" });
+        renderSources(bubbleEl, sources);
+        history.push({ name: a.name, text, kind: "agent", sources });
         lastSpeaker = a.name;
         saveSession();
         tts.speak(a.name, text);
@@ -537,7 +560,6 @@ async function copyConversation() {
 }
 
 // ---------- Chia sẻ qua link ----------
-const b64encode = (s) => btoa(unescape(encodeURIComponent(s)));
 const b64decode = (s) => decodeURIComponent(escape(atob(s)));
 
 async function shareLink() {
@@ -548,23 +570,40 @@ async function shareLink() {
     history,
     summary, summarizedCount, lastSpeaker,
   };
-  let code;
-  try { code = b64encode(JSON.stringify(payload)); }
-  catch (e) { return flash($("shareBtn"), "✕ Lỗi"); }
-  const url = `${location.origin}${location.pathname}#share=${code}`;
+  let url;
+  try {
+    const r = await fetch("/api/session/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.id) throw new Error(j.error || "Lưu thất bại");
+    url = `${location.origin}${location.pathname}#s=${j.id}`;
+  } catch (e) {
+    return flash($("shareBtn"), "✕ " + (e.message || "Lỗi"));
+  }
   try {
     await navigator.clipboard.writeText(url);
-    flash($("shareBtn"), url.length > 8000 ? "⚠ Link dài, đã chép" : "✅ Đã chép link");
+    flash($("shareBtn"), "✅ Đã chép link");
   } catch (e) {
     prompt("Sao chép link chia sẻ:", url);
   }
 }
 
-function loadFromShare() {
-  const m = location.hash.match(/#share=(.+)$/);
-  if (!m) return false;
-  let d;
-  try { d = JSON.parse(b64decode(m[1])); } catch (e) { return false; }
+async function loadFromShare() {
+  const hash = location.hash;
+  const ms = hash.match(/#s=([A-Za-z0-9]+)$/);   // link ngan (luu o server)
+  const ml = hash.match(/#share=(.+)$/);          // link cu (nhung ca phien vao URL)
+  let d = null;
+  if (ms) {
+    try {
+      const r = await fetch(`/api/session/${ms[1]}`);
+      if (r.ok) d = await r.json();
+    } catch (e) {}
+  } else if (ml) {
+    try { d = JSON.parse(b64decode(ml[1])); } catch (e) {}
+  }
   if (!d || !d.agents) return false;
   if (history.length && !confirm("Mở phiên được chia sẻ? Phiên hiện tại sẽ bị thay thế.")) return false;
 

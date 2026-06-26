@@ -178,3 +178,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   font-size: .8rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
   padding: 4px 0; max-width: 100%;
 }
+
+/* ----- Footnote nguồn tra cứu ----- */
+.bubble .sources {
+  margin-top: 8px; padding-top: 6px; border-top: 1px dashed #2a3150;
+  font-size: .72rem; color: var(--muted); line-height: 1.7;
+}
+.bubble .sources a { color: #7dd3fc; text-decoration: none; }
+.bubble .sources a:hover { text-decoration: underline; }
