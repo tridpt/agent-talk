@@ -37,8 +37,12 @@ agent-talk/
 │   ├── app.js       # Vòng lặp hội thoại, lưu phiên, xuất file
 │   ├── personas.js  # Thư viện tính cách mẫu
 │   └── style.css
+├── tests/           # Test pytest (LLM được mock, không tốn API key)
+├── Dockerfile
+├── .dockerignore
 ├── .env.example
-└── requirements.txt
+├── requirements.txt
+└── requirements-dev.txt  # Thêm pytest để chạy test
 ```
 
 ## Cài đặt
